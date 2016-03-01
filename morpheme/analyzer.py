@@ -1,7 +1,5 @@
-from pathlib import Path
-from collections import Counter
-from random import random, shuffle
-
+import pathlib
+import collections
 import argparse
 import itertools
 import pickle
@@ -16,9 +14,10 @@ import chainer.links as cl
 
 import dataset
 import util
+import stat
 
 
-src = Path(__file__).parent
+src = pathlib.Path(__file__).parent
 def_dir = src/'def'
 pos_id_def = def_dir/'pos-id.def'
 conj_type_def = def_dir/'conj_type-id.csv'
@@ -60,8 +59,7 @@ class BiClassifier(Chain):
         )
 
     def __call__(self, x):
-        self.value = self.output(x)
-        return cf.sigmoid(self.value)
+        return self.output(x)
 
 
 class Classifier(Chain):
@@ -74,8 +72,7 @@ class Classifier(Chain):
         )
 
     def __call__(self, x):
-        self.value = self.output(x)
-        return cf.softmax(self.value)
+        return self.output(x)
 
 
 class ForwardAnalyzer(Chain):
@@ -111,52 +108,48 @@ class ForwardAnalyzer(Chain):
         return self.is_eow, self.pos, self.conj_type, self.conj_form
     
 class Analyzer(Chain):
-    def __init__(self, forward, backward):
+    def __init__(self, backward, forward):
         super().__init__(
-            forward=forward,
-            backward=backward
+            backward=backward,
+            forward=forward
         )
 
     def reset_state(self):
-        self.forward.reset_state()
         self.backward.reset_state()
+        self.forward.reset_state()
 
-    def _solve(self, sentence):
+    def __call__(self, xs):
         self.reset_state()
         self.zerograds()
-        rxs = generate_data(sentence[::-1])
-        xs = generate_data(sentence)
-        ts = generate_label(sentence)
         ys = []
-        labels = []
-        data = []
-        for x in rxs:
+        tags = []
+        for x in reversed(xs):
             ys.append(
-                self.backward(Variable(np.array([x], dtype=np.int32)))
+                self.backward(
+                    Variable(np.array([x], dtype=np.int32))
+                )
             )
         ys.reverse()
-        for x, label, y in zip(xs, ts, ys):
-            self.forward(Variable(np.array([x], dtype=np.int32)), y)
-            labels.append(self.forward.segmenter.value)
-            if label:
-                data.append([
-                    self.forward.pos_classifier.value,
-                    self.forward.conj_type_classifier.value,
-                    self.forward.conj_form_classifier.value
-                ])
-        return labels, data
+        for x, y in zip(xs, ys):
+            label, pos, conjt, conjf = self.forward(
+                Variable(np.array([x], dtype=np.int32)), y
+            )
+            tags.append((label, (pos, conjt, conjf)))
+        return tags
 
     def train(self, sentence):
-        labels, data = self._solve(sentence)
+        tags = self(generate_data(sentence))
         
-        ts = generate_label(sentence)
+        attrs = []
         self.loss = Variable(np.array(0, dtype=np.float32))
-        for exp, act in zip(ts, labels):
+        for exp, (label, attr) in zip(generate_label(sentence), tags):
             self.loss += cf.sigmoid_cross_entropy(
-                act,
+                label,
                 Variable(np.array([[exp]], dtype=np.int32))
             )
-        for exp, act in zip(sentence, data):
+            if exp:
+                attrs.append(attr)
+        for exp, act in zip(sentence, attrs):
             es = [
                 self.forward.pos_classifier.mapping[exp.pos],
                 self.forward.conj_type_classifier.mapping[exp.conj_type],
@@ -171,45 +164,60 @@ class Analyzer(Chain):
         return self.loss            
 
     def test(self, sentence):
-        labels, data = self._solve(sentence)
+        tags = self(generate_data(sentence))
+        attrs = []
+
+        mats = [
+            np.zeros((2, 2)),
+            np.zeros((
+                len(self.forward.pos_classifier.mapping),
+                len(self.forward.pos_classifier.mapping)
+            )),
+            np.zeros((
+                len(self.forward.conj_type_classifier.mapping),
+                len(self.forward.conj_type_classifier.mapping)
+            )),
+            np.zeros((
+                len(self.forward.conj_form_classifier.mapping),
+                len(self.forward.conj_form_classifier.mapping)
+            ))
+        ]
         
-        mat = np.zeros((2, 2))
-        cnt = np.zeros((3,))
-        acc = np.zeros((3,))
-        
-        ts = generate_label(sentence)
-        for exp, act in zip(ts, labels):
-            mat[exp, int(cf.sigmoid(act).data[0, 0] > 0.5)] += 1.0
-        for exp, act in zip(sentence, data):
-            es = [
+        for exp, (label, attr) in zip(generate_label(sentence), tags):
+            mats[0][exp, int(cf.sigmoid(label).data[0, 0] > 0.5)] += 1.0
+            if exp:
+                attrs.append(attr)
+        for exp, act in zip(sentence, attrs):
+            exps = [
                 self.forward.pos_classifier.mapping[exp.pos],
                 self.forward.conj_type_classifier.mapping[exp.conj_type],
                 self.forward.conj_form_classifier.mapping[exp.conj_form]
             ]
-            for i, (a, e) in enumerate(zip(act, es)):
-                cnt[i] += 1
-                acc[i] += int(cf.softmax(a).data.argmax(1)[0] == e)
-        return mat, cnt, acc
+            for m, a, e in zip(mats[1:], act, exps):
+                m[e, cf.softmax(a).data.argmax(1)[0]] += 1
+        return mats
 
-    def generate(self, sentence):
-        labels, _ = self._solve(sentence)
-        
-        xs = generate_data(sentence)
+    def generate(self, xs):
+        tags = self(xs)
         buf = bytearray()
-        words = []
-        info = []
-        for x, label in zip(xs, labels):
+        for x, (label, attr) in zip(xs, tags):
             buf.append(x)
             if cf.sigmoid(label).data[0, 0] > 0.5:
-                words.append(buf.decode('utf-8', 'replace'))
+                yield (
+                    buf.decode('utf-8', 'replace'),
+                    (
+                        self.forward.pos_classifier.mapping(
+                            cf.softmax(attr[0]).data.argmax(1)[0]
+                        ),
+                        self.forward.conj_type_classifier.mapping(
+                            cf.softmax(attr[1]).data.argmax(1)[0]
+                        ),
+                        self.forward.conj_form_classifier.mapping(
+                            cf.softmax(attr[2]).data.argmax(1)[0]
+                        )
+                    )
+                )
                 buf = bytearray()
-        return words
-
-    
-root = Path(__file__).parent
-data_dir = root/'data'/'Translate'
-out_dir = root/'out'
-            
 
 def train(model, optimizer, sentence):
     model.zerograds()
@@ -242,14 +250,14 @@ def init():
             (row[1], int(row[0])) for row in csv.reader(f)   
         )
     model = Analyzer(
+        Recognizer(256, 256, 256, 256),
         ForwardAnalyzer(
             Recognizer(256, 256, 256, 64 + 256 + 128 + 128),
             BiClassifier(64),
             Classifier(256, pos_mapping),
             Classifier(128, conj_type_mapping),
             Classifier(128, conj_form_mapping)
-        ),
-        Recognizer(256, 256, 256, 256),
+        )
     )        
     optimizer = optimizers.AdaGrad(lr=0.01)
     optimizer.setup(model)
@@ -270,9 +278,9 @@ def load(load_dir, epoch):
     return model, optimizer
 
 def generate_data(sentence):
-    return itertools.chain.from_iterable(
+    return bytearray(itertools.chain.from_iterable(
         info.surface_form.encode('utf-8') for info in sentence
-    )
+    ))
 
 def generate_label(sentence):
     return itertools.chain.from_iterable(
@@ -283,7 +291,7 @@ def generate_label(sentence):
 
     
 def run_training(args):
-    out_dir = Path(args.directory)
+    out_dir = pathlib.Path(args.directory)
     sentences = dataset.load(args.source)
     if args.epoch is not None:
         start = args.epoch + 1
@@ -304,37 +312,40 @@ def run_training(args):
             serializers.save_npz(str(out_dir/model_name(i)), model)
             serializers.save_npz(str(out_dir/optimizer_name(i)), optimizer)
         else:
-            print(util.progress('sentence',
+            print(util.progress('batch {}'.format(i),
                            (i % batchsize) / batchsize, 100),
                   end='')
         train(model, optimizer, sentence)
-        
-        
+
 
 def run_test(args):
-    out_dir = Path(args.directory)
+    out_dir = pathlib.Path(args.directory)
     sentences = dataset.load(args.source)
     model, _ = load(out_dir, args.epoch)
-    mat_sum = np.zeros((2, 2))
-    count_sum = np.zeros((3, ))
-    acc_sum = np.zeros((3, ))
+    mats_sum = []
     for i, sentence in enumerate(itertools.islice(sentences, 100)):
-        mat, count, acc = test(model, sentence)
-        mat_sum += mat
-        count_sum += count
-        acc_sum += acc
-        
-        prec = mat_sum[1, 1] / (mat_sum[1, 1] + mat_sum[0, 1])
-        rec = mat_sum[1, 1] / (mat_sum[1, 1] + mat_sum[1, 0])
-        print('precision:', prec)
-        print('recall:', rec)
-        print('F-measure:', 2 * rec * prec / (rec + prec))
+        mats = test(model, sentence)
+        if i == 0:
+            mats_sum = mats
+        else:
+            for a, s in zip(mats, mats_sum):
+                s += a
+        for no, a in enumerate(mats_sum):
+            if no == 0:
+                prec, rec, f = stat.f_measure(a)
+            else:
+                prec, rec, f = stat.f_measure_micro_average(a)
+            print('no:', no)
+            print('precision:', prec)
+            print('recall:', rec)
+            print('F-measure:', f)
 
-        print('accuracy:', acc_sum / count_sum)
-
-        model.reset_state()
-        print('expect:', '/'.join(info.surface_form for info in sentence))
-        print('actual:', '/'.join(model.generate(sentence)))
+        print('expect:', '/'.join(
+            info.surface_form for info in sentence)
+        )
+        print('actual:', '/'.join(
+            attr[0] for attr in model.generate(generate_data(sentence))
+        ))
             
 def main():
     parser = argparse.ArgumentParser(
