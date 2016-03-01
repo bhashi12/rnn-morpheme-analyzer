@@ -1,3 +1,5 @@
+import numpy as np
+
 def f_measure(a):
     assert a.shape == (2, 2)
     prec = a[1, 1] / (a[1, 1] + a[0, 1] + 1e-9)

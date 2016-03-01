@@ -14,7 +14,7 @@ import chainer.links as cl
 
 import dataset
 import util
-import stat
+import statistic
 
 
 src = pathlib.Path(__file__).parent
@@ -73,7 +73,6 @@ class Classifier(Chain):
 
     def __call__(self, x):
         return self.output(x)
-
 
 class ForwardAnalyzer(Chain):
     def __init__(self, recognizer, segmenter,
@@ -332,9 +331,9 @@ def run_test(args):
                 s += a
         for no, a in enumerate(mats_sum):
             if no == 0:
-                prec, rec, f = stat.f_measure(a)
+                prec, rec, f = statistic.f_measure(a)
             else:
-                prec, rec, f = stat.f_measure_micro_average(a)
+                prec, rec, f = statistic.f_measure_micro_average(a)
             print('no:', no)
             print('precision:', prec)
             print('recall:', rec)
