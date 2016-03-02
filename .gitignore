@@ -4,7 +4,9 @@
 /out/
 /data/
 /man/
+/image/
 __pycache__/
 pip-selfcheck.json
 pyvenv.cfg
 memo.txt
+
