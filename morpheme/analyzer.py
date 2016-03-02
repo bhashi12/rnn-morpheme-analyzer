@@ -135,7 +135,6 @@ def generate_attr(sentence, mappings):
 def load(load_dir, epoch):
     with (load_dir/meta_name).open('rb') as f:
         storage = Storage(*np.load(f)[0])
-        print(storage)
     serializers.load_npz(
         str(load_dir/model_name(epoch)),
         storage.model
@@ -269,7 +268,27 @@ def run_test(args):
                 generate_data(sentence)
             )
         ))
-            
+
+
+def run(args):
+    out_dir = pathlib.Path(args.directory)
+    sentences = [line for line in args.source]
+    storage = load(out_dir, args.epoch)
+    
+    for sentence in sentences:
+        print('\n'.join(
+            '{}\t{},{},{}'.format(
+                y,
+                storage.mappings.pos(zs[0]),
+                storage.mappings.conj_type(zs[1]),
+                storage.mappings.conj_form(zs[2]),
+            )
+            for (y, zs) in generate(
+                storage.model,
+                sentence.encode('utf-8')
+            )
+        ))
+        
 def main():
     src = pathlib.Path(__file__).parent
     def_dir = src/'def'
@@ -284,8 +303,8 @@ def main():
     subparsers = parser.add_subparsers()
     train_parser = subparsers.add_parser(
         'train',
-        help='Training Encoder-Decoder Model'
-    )    
+        help='train segmentation model'
+    )
     train_parser.add_argument(
         '--pos-def',
         dest='pos_def',
@@ -323,11 +342,14 @@ def main():
     )
     train_parser.set_defaults(func=run_training)
 
-
     test_parser = subparsers.add_parser(
         'test',
-        help='Testing Encoder-Decoder Model'
+        help='test segmentation model'
     )
+    test_parser.add_argument(
+        'source',
+        help='path to corpus'
+    )    
     test_parser.add_argument(
         'directory',
         help='directory in which model was saved'
@@ -336,11 +358,26 @@ def main():
         'epoch',
         help='generation of model'
     )
-    test_parser.add_argument(
-        'source',
-        help='path to corpus'
-    )
     test_parser.set_defaults(func=run_test)
+
+    run_parser = subparsers.add_parser(
+        'run',
+        help='run word segmentation'
+    )
+    run_parser.add_argument(
+        'source',
+        type=argparse.FileType('r'),
+        help='path to corpus'
+    )    
+    run_parser.add_argument(
+        'directory',
+        help='directory in which model was saved'
+    )
+    run_parser.add_argument(
+        'epoch',
+        help='generation of model'
+    )
+    run_parser.set_defaults(func=run)    
 
     args = parser.parse_args()
     if args.func is None:
