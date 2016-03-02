@@ -55,7 +55,11 @@ python morpheme/segmentation.py run path/to/test.txt path/to/output/directory ep
 
 [chainer_examples](https://github.com/odashi/chainer_examples) や [Bi-directional LSTM Recurrent Neural Network for Chinese Word Segmentation](http://arxiv.org/abs/1602.04874) では，一般的な [Bi-directional RNN](http://arxiv.org/pdf/1303.5778.pdf) が使われています．
 
+![Bi-directional RNN](https://raw.githubusercontent.com/mitaki28/rnn-morpheme-analyzer/master/image/bi-rnn.png)
+
 これを以下のように，少しだけ変えてみました．
+
+![Bi-directional RNN 2](https://raw.githubusercontent.com/mitaki28/rnn-morpheme-analyzer/master/image/bi-rnn2.png)
 
 出力前の隠れ層で 2つの RNN の出力をマージするのではなく，backward RNN の出力を直接 forward RNN  にマージしています． DAG の最長パスが2倍に伸びるので，処理は遅くなるかわりに，すべての位置について，次にどのような文字列が現れるかを先読みした上で分割を行うため，精度が向上するものと思われます．
 
@@ -155,7 +159,7 @@ F-measure: 0.946687742492
 
 `morpheme/def` 以下の形容詞・活用型・活用形定義ファイルは[mecab-naist-jdic](https://osdn.jp/projects/naist-jdic/) から抽出したものであり，`morpheme/def/COPYING` のライセンスに基づきます．
 
-このプログラム本体は MIT ライセンスです．
+このプログラム本体は [MIT ライセンス](https://github.com/mitaki28/rnn-morpheme-analyzer/blob/master/LICENSE)です．
 
 ## TODO
 
