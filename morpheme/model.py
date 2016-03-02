@@ -89,7 +89,10 @@ class Tagger(Chain):
         segs = list(itertools.accumulate(
             clf.n_input for clf in self.classifiers
         ))
-        xs = cf.split_axis(x, segs, 1)
+        if segs:
+            xs = cf.split_axis(x, segs, 1)
+        else:
+            xs = [x]
         
         y = self.segmenter(xs[-1])
         zs = tuple(clf(x) for x, clf in zip(xs[:-1], self.classifiers))

@@ -93,20 +93,9 @@ def train(model, optimizer, xs, ts, uss=None):
     optimizer.clip_grads(10)
     optimizer.update()
 
-
-Attribute = collections.namedtuple(
-    'Attribute',
-    [
-        'pos',
-        'conj_type',
-        'conj_form'
-    ]
-)
-
 Storage = collections.namedtuple(
     'Storage',
     [
-        'mappings',
         'model',
         'optimizer'
     ]    
@@ -114,22 +103,16 @@ Storage = collections.namedtuple(
 
 def generate_data(sentence):
     return bytearray(itertools.chain.from_iterable(
-        info.surface_form.encode('utf-8') for info in sentence
+        word.encode('utf-8') for word in sentence
     ))
 
 def generate_label(sentence):
     return tuple(itertools.chain.from_iterable(
-        (int(i == len(info.surface_form.encode('utf-8')))
-         for i, c in enumerate(info.surface_form.encode('utf-8'), 1))
-        for info in sentence
+        (int(i == len(word.encode('utf-8')))
+         for i, c in enumerate(word.encode('utf-8'), 1))
+        for word in sentence
     ))
 
-def generate_attr(sentence, mappings):
-    return tuple(
-        tuple(mapping[getattr(info, field)]
-              for field, mapping in zip(mappings._fields, mappings))
-        for info in sentence
-    )
 
 
 def load(load_dir, epoch):
@@ -152,46 +135,31 @@ def init(args):
         attr, pos_id = line.split()
         attr = tuple(attr.split(','))
         return (attr, int(pos_id))
-    mappings = Attribute(
-        util.OneToOneMapping(
-            parse(line) for line in args.pos_def
-        ),
-        util.OneToOneMapping(
-            (row[1], int(row[0])) for row in csv.reader(args.conj_type_def)
-        ),
-        util.OneToOneMapping(
-            (row[1], int(row[0])) for row in csv.reader(args.conj_form_def)
-        )
-    )
     model = md.Analyzer(
         md.BidirectionalRecognizer(
-            md.Recognizer(256, 256, 256, 256),
-            md.Recognizer(256, 256, 256, 64 + 256 + 128 + 128)
+            md.Recognizer(256, 100, 100, 100),
+            md.Recognizer(256, 100, 100, 100)
         ),
         md.Tagger(
-            md.BiClassifier(64),
-            chainer.ChainList(
-                md.Classifier(256, len(mappings.pos)),
-                md.Classifier(128, len(mappings.conj_type)),
-                md.Classifier(128, len(mappings.conj_form))
-            )
+            md.BiClassifier(100),
+            chainer.ChainList()
         )
     )        
     optimizer = optimizers.AdaGrad(lr=0.01)
     optimizer.setup(model)
-    return Storage(mappings, model, optimizer)
+    return Storage(model, optimizer)
 
     
 def run_training(args):
     out_dir = pathlib.Path(args.directory)
-    sentences = dataset.load(args.source)
+    sentences = [line.split() for line in args.source]
     
     if args.epoch is not None:
         start = args.epoch + 1
         storage = load(out_dir, args.epoch)
         sentences = itertools.islice(sentences, start, None)
     else:
-        start = 0
+        start = 1
         storage = init(args)        
         if (out_dir/meta_name).exists():
             if input('Overwrite? [y/N]: ').strip().lower() != 'y':
@@ -199,7 +167,7 @@ def run_training(args):
         with (out_dir/meta_name).open('wb') as f:
             np.save(f, [storage])
         
-    batchsize = 1000
+    batchsize = 10000
     for i, sentence in enumerate(sentences, start):
         if i % batchsize == 0:
             print()
@@ -221,30 +189,22 @@ def run_training(args):
         train(storage.model,
               storage.optimizer,
               generate_data(sentence),
-              generate_label(sentence),
-              generate_attr(
-                  sentence,
-                  storage.mappings
-              )
+              generate_label(sentence)
         )
 
 
 def run_test(args):
     out_dir = pathlib.Path(args.directory)
-    sentences = dataset.load(args.source)
+    sentences = [line.split() for line in args.source]
     storage = load(out_dir, args.epoch)
     y_sum = None
     zs_sum = None
     
-    for i, sentence in enumerate(itertools.islice(sentences, 100)):
+    for i, sentence in enumerate(sentences):
         y_mat, zs_mat = test(
             storage.model,
             generate_data(sentence),
-            generate_label(sentence),
-            generate_attr(
-                sentence,
-                storage.mappings
-            )
+            generate_label(sentence)
         )
         if i == 0:
             y_sum = y_mat
@@ -261,7 +221,7 @@ def run_test(args):
         print('F-measure:', f)        
 
         print('expect:', '/'.join(
-            info.surface_form for info in sentence)
+            word for word in sentence)
         )
         print('actual:', '/'.join(
             y for (y, zs) in generate(
@@ -285,29 +245,7 @@ def main():
     train_parser = subparsers.add_parser(
         'train',
         help='Training Encoder-Decoder Model'
-    )    
-    train_parser.add_argument(
-        '--pos-def',
-        dest='pos_def',
-        type=argparse.FileType('r'),
-        default=str(pos_id_def),
-        help='path to pos id definition'
     )
-    train_parser.add_argument(
-        '--conjugation-type-def',
-        dest='conj_type_def',
-        type=argparse.FileType('r'),
-        default=str(conj_type_def),
-        help='path to conjugation type id definition'
-    )
-    train_parser.add_argument(
-        '--conjugated-form-def',
-        dest='conj_form_def',
-        type=argparse.FileType('r'),
-        default=str(conj_form_def),
-        help='path to conjugated form id definition'
-    )
-    
     train_parser.add_argument(
         '-e', '--epoch',
         type=int,
@@ -315,6 +253,7 @@ def main():
     )    
     train_parser.add_argument(
         'source',
+        type=argparse.FileType('r'),
         help='path to corpus'
     )
     train_parser.add_argument(
@@ -338,6 +277,7 @@ def main():
     )
     test_parser.add_argument(
         'source',
+        type=argparse.FileType('r'),
         help='path to corpus'
     )
     test_parser.set_defaults(func=run_test)
