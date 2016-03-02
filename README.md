@@ -1,6 +1,6 @@
 ## このプログラムについて
 
-最近話題の [LSTM (Long-Short Term Memory)](https://en.wikipedia.org/wiki/Long_short-term_memory) を使って実験的に作った形態素解析エンジンです．もともとは，[Chainer](http://chainer.org/) の練習用に書いてみたもので，公開する予定もなかったのですが，思いのほか高い性能が得られたので公開することにしました．
+最近話題の [LSTM (Long-Short Term Memory)](https://en.wikipedia.org/wiki/Long_short-term_memory) を使って実験的に作った形態素解析エンジンです．もともとは，[Chainer](http://chainer.org/) の練習用に書いてみました．
 
 分かち書きだけでなく，形態素解析も実装しているのですが，まだデータが整理できていないので，ドキュメントは準備中です．
 
@@ -150,8 +150,6 @@ precision: 0.93455645924
 recall: 0.959138115112
 F-measure: 0.946687742492
 ```
-
-ちなみに，このデータセットを使って学習した場合，記号やアルファベットの学習がうまくいかないようです．
 
 
 
