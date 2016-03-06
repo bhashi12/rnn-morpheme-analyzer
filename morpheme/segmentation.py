@@ -249,7 +249,7 @@ def main():
     conj_form_def = def_dir/'conj_form-id.csv'
     
     parser = argparse.ArgumentParser(
-        description='Encoder-Decoder Model'
+        description='Segmentation'
     )
     parser.set_defaults(func=lambda x: parser.print_usage())
     subparsers = parser.add_subparsers()

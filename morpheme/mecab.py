@@ -22,7 +22,7 @@ def parse(line):
     except ValueError:
         w = ' '
         attr = line
-    attr = attr.split(',')
+    attr = attr.split(',')[:9]
     attr += [NIL] * (9 - len(attr))
     attr = [tuple(attr[:4])] + attr[4:]
     return Entry(*([w] + attr))

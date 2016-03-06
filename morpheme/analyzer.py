@@ -198,7 +198,7 @@ def run_training(args):
         with (out_dir/meta_name).open('wb') as f:
             np.save(f, [storage])
         
-    batchsize = 1000
+    batchsize = 5000
     for i, sentence in enumerate(sentences, start):
         if i % batchsize == 0:
             print()
@@ -257,7 +257,14 @@ def run_test(args):
         print('== segmentation ==')
         print('precision:', prec)
         print('recall:', rec)
-        print('F-measure:', f)        
+        print('F-measure:', f)
+        for k, z_sum in zip(storage.mappings._fields, zs_sum):
+            prec, rec, f = statistic.f_measure_micro_average(z_sum)
+            print('== {} =='.format(k))
+            print('precision:', prec)
+            print('recall:', rec)
+            print('F-measure:', f)
+            
 
         print('expect:', '/'.join(
             info.surface_form for info in sentence)
@@ -297,7 +304,7 @@ def main():
     conj_form_def = def_dir/'conj_form-id.csv'
     
     parser = argparse.ArgumentParser(
-        description='Encoder-Decoder Model'
+        description='Morpheme Analyzer'
     )
     parser.set_defaults(func=lambda x: parser.print_usage())
     subparsers = parser.add_subparsers()
