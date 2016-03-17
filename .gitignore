@@ -2,4 +2,6 @@ __pycache__/
 pip-selfcheck.json
 pyvenv.cfg
 memo.txt
-/morpheme-venv/
+/morpheme-venv
+/in
+/out

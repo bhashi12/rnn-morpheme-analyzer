@@ -129,6 +129,17 @@ def load(load_dir, epoch):
     return storage
 
 
+def save_param(out_dir, epoch, storage):
+    serializers.save_npz(
+        str(out_dir/model_name(epoch)),
+        storage.model
+    )
+    serializers.save_npz(
+        str(out_dir/optimizer_name(epoch)),
+        storage.optimizer
+    )
+
+
 def init(args):
     def parse(line):
         attr, pos_id = line.split()
@@ -166,30 +177,27 @@ def run_training(args):
         with (out_dir/meta_name).open('wb') as f:
             np.save(f, [storage])
         
-    batchsize = 10000
+    checkpoint = args.checkpoint
     for i, sentence in enumerate(sentences, start):
-        if i % batchsize == 0:
-            print()
-            serializers.save_npz(
-                str(out_dir/model_name(i)),
-                storage.model
-            )
-            serializers.save_npz(
-                str(out_dir/optimizer_name(i)),
-                storage.optimizer
-            )
-        else:
-            print(
-                util.progress(
-                    'batch {}'.format(i // batchsize),
-                    (i % batchsize) / batchsize, 100),
-                end=''
-            )
         train(storage.model,
               storage.optimizer,
               generate_data(sentence),
               generate_label(sentence)
-        )
+        )        
+        if i % checkpoint != 0:
+            print(
+                util.progress(
+                    'checkpoint {}'.format(i // checkpoint),
+                    (i % checkpoint) / checkpoint, 100),
+                end=''
+            )            
+        else:
+            print()
+            save_param(out_dir, i, storage)
+    print()
+    save_param(out_dir, i, storage)                
+
+              
 
 
 def run_test(args):
@@ -261,6 +269,12 @@ def main():
         '-e', '--epoch',
         type=int,
         help='restore and continue training from EPOCH'
+    )
+    train_parser.add_argument(
+        '-c', '--checkpoint',
+        default=1000,
+        type=int,
+        help='if epoch % CHECKPOINT == 0 then model parameter will saved'
     )    
     train_parser.add_argument(
         'source',
