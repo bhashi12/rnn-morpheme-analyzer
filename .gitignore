@@ -1,11 +1,5 @@
-/lib/
-/include/
-/bin/
-/out/
-/data/
-/man/
 __pycache__/
 pip-selfcheck.json
 pyvenv.cfg
 memo.txt
-
+/morpheme-venv/

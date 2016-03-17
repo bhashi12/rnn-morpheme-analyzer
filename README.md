@@ -11,10 +11,10 @@ Python3 + Chainer 1.6 以上で動作します．
 
 ```bash
 git clone https://github.com/mitaki28/rnn-morpheme-analyzer.git
-python3 -m venv rnn-morpheme-analyzer
 cd rnn-morpheme-analyzer
-source bin/activate
-pip install chainer
+python3 -m venv morpheme-venv 
+source morpheme-venv/bin/activate
+pip install -r requirements.txt
 ```
 
 ### 分かち書き
